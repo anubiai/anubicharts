@@ -22,11 +22,17 @@ bare imports. It needs a browser with **WebGL2** (available in current Chrome, E
 ```html
 <div id="chart" style="width:800px;height:400px"></div>
 <script type="module">
-  import { createChart, CandlestickSeries } from anubicharts;
+  import { createChart, CandlestickSeries } from 'anubicharts';
   const chart = createChart(document.getElementById('chart'), { autoSize: true });
   const series = chart.addSeries(CandlestickSeries, {});
   series.setData([{ time: 1700000000, open: 1, high: 2, low: 0.5, close: 1.5 } /* ... */]);
 </script>
+```
+
+Without a bundler, import it straight from a CDN instead (a bare `'anubicharts'` import only works where a bundler or import map resolves it):
+
+```js
+import { createChart, CandlestickSeries } from 'https://cdn.jsdelivr.net/npm/anubicharts@0.1.0/src/lw.js';
 ```
 
 To try it from a clone instead, import `./src/lw.js` as the examples do, and serve the folder with any static server (ES modules do not
