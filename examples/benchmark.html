@@ -1,0 +1,127 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>AnubiCharts benchmark: pan and zoom</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; font: 14px system-ui, sans-serif; background: #0e0e0f; color: #cfd2d9; }
+  header { padding: 12px 16px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #222; }
+  label { display: flex; gap: 6px; align-items: center; }
+  input, select, button { background: #1a1b1f; color: inherit; border: 1px solid #333; border-radius: 4px; padding: 4px 8px; }
+  input[type=number] { width: 84px; }
+  button { cursor: pointer; }
+  #chart { width: 100vw; height: 56vh; }
+  pre { margin: 0; padding: 12px 16px; white-space: pre-wrap; }
+  .note { color: #8b8f99; padding: 0 16px 16px; max-width: 900px; }
+</style>
+<header>
+  <strong>AnubiCharts benchmark</strong>
+  <label>Engine
+    <select id="engine"><option value="aq">AnubiCharts (WebGL2)</option><option value="lw">Lightweight Charts 5.2.1 (stock)</option></select>
+  </label>
+  <label>Candles <input id="n" type="number" value="20000" min="1000" step="1000"></label>
+  <label>Moving averages <input id="lines" type="number" value="37" min="0" max="60"></label>
+  <label>Visible bars <input id="vis" type="number" value="600" min="50" step="50"></label>
+  <label>Steps <input id="steps" type="number" value="300" min="30" step="10"></label>
+  <button id="run">Run pan test</button>
+  <button id="runzoom">Run zoom test</button>
+</header>
+<div id="chart"></div>
+<pre id="out">Choose an engine and press a button. Run each engine at least 3 times and ignore the first run (JIT and shader warm-up).
+Keep the tab visible and in the foreground: browsers throttle hidden pages.</pre>
+<div class="note">
+  Method: the visible range is moved one step per animation frame (pan: 1 bar per frame; zoom: the range alternates between 0.5x and 2x
+  of the visible bars). For each frame we record (a) the time spent in the script calling the chart API (this is NOT the render cost: both engines
+  draw later, in the next animation frame) and (b) the interval between consecutive animation frames, which is the number that matters. The interval is capped by your display refresh rate (16.7 ms at 60 Hz), so an engine that keeps up shows
+  the display period; a slower one shows larger values. GPU time is not measured directly. Lightweight Charts is loaded unmodified from
+  a CDN. Please report your GPU, browser, OS, screen size and the numbers.
+</div>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js"></script>
+<script type="module">
+import * as aq from '../src/lw.js';
+
+const $ = (id) => document.getElementById(id);
+const PALETTE = ['#2962FF', '#FF6D00', '#AB47BC', '#26C6DA', '#FFEB3B', '#EC407A', '#66BB6A', '#8D6E63', '#BDBDBD', '#5C6BC0'];
+let chart = null, E = null, count = 0;
+
+// deterministic synthetic data (same for both engines)
+function makeData(n) {
+  let seed = 12345, p = 100;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const bars = [];
+  for (let i = 0; i < n; i++) {
+    const o = p, c = p + (rnd() - 0.5) * 2;
+    bars.push({ time: 1500000000 + i * 3600, open: o, high: Math.max(o, c) + rnd(), low: Math.min(o, c) - rnd(), close: c });
+    p = c;
+  }
+  return bars;
+}
+function movingAverage(bars, len, ema) {
+  const out = []; let e = null, s = 0;
+  const a = 2 / (len + 1);
+  for (let i = 0; i < bars.length; i++) {
+    const c = bars[i].close;
+    s += c; if (i >= len) s -= bars[i - len].close;
+    e = e === null ? c : e + a * (c - e);
+    if (i >= len - 1) out.push({ time: bars[i].time, value: ema ? e : s / len });
+  }
+  return out;
+}
+
+function build() {
+  if (chart) { chart.remove(); chart = null; }
+  E = $('engine').value === 'aq' ? aq : window.LightweightCharts;
+  const n = +$('n').value, lines = +$('lines').value;
+  chart = E.createChart($('chart'), {
+    autoSize: true,
+    layout: { background: { type: 'solid', color: '#0e0e0f' }, textColor: '#a8acb5' },
+    grid: { vertLines: { color: '#1a1b1f' }, horzLines: { color: '#1a1b1f' } },
+  });
+  const bars = makeData(n);
+  const candles = chart.addSeries(E.CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false });
+  candles.setData(bars);
+  for (let k = 0; k < lines; k++) {
+    const s = chart.addSeries(E.LineSeries, { color: PALETTE[k % PALETTE.length], lineWidth: k % 3 === 0 ? 2 : 1, priceLineVisible: false, lastValueVisible: false });
+    s.setData(movingAverage(bars, 5 + k * 7, k % 2 === 0));
+  }
+  count = n;
+  const vis = +$('vis').value;
+  chart.timeScale().setVisibleLogicalRange({ from: n - vis - 1000, to: n - 1000 });
+}
+
+const raf = () => new Promise((r) => requestAnimationFrame(r));
+const q = (a, f) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(f * s.length))]; };
+const fmt = (a) => `median ${q(a, 0.5).toFixed(1)} ms · p95 ${q(a, 0.95).toFixed(1)} ms · max ${Math.max(...a).toFixed(1)} ms`;
+
+async function run(mode) {
+  build();
+  await raf(); await raf();
+  const steps = +$('steps').value, vis = +$('vis').value;
+  const script = [], interval = [];
+  let last = await raf(), pos = count - vis - 1000;
+  for (let i = 0; i < steps; i++) {
+    let from, to;
+    if (mode === 'pan') { pos += 1; from = pos; to = pos + vis; }
+    else { const f = i % 40 < 20 ? 0.5 + 1.5 * ((i % 20) / 20) : 2 - 1.5 * ((i % 20) / 20); const w = vis * f; to = count - 1000; from = to - w; }
+    const t0 = performance.now();
+    chart.timeScale().setVisibleLogicalRange({ from, to });
+    script.push(performance.now() - t0);
+    const now = await raf();
+    interval.push(now - last); last = now;
+  }
+  const label = $('engine').selectedOptions[0].textContent;
+  $('out').textContent =
+    `${label}: ${mode} test, ${count} candles, ${$('lines').value} lines, ${steps} frames\n` +
+    `script time per frame: ${fmt(script)}\n` +
+    `frame interval:        ${fmt(interval)}\n` +
+    `GPU/renderer: ${gpuName()}  ·  DPR ${devicePixelRatio}  ·  viewport ${innerWidth}x${innerHeight}  ·  ${navigator.userAgent}\n\n` + $('out').textContent.split('\n\n').slice(0, 6).join('\n\n');
+}
+function gpuName() {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2'), ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'unknown';
+  } catch { return 'unknown'; }
+}
+$('run').onclick = () => run('pan');
+$('runzoom').onclick = () => run('zoom');
+build();
+</script>

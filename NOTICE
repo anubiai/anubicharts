@@ -1,0 +1,21 @@
+AnubiCharts, the AnubiQuant chart engine
+Copyright (c) 2026 AnubiAI (anubiai.com)
+
+This product contains parts derived from, or inspired by, TradingView Lightweight Charts(TM)
+Copyright (c) 2025 TradingView, Inc. (https://www.tradingview.com/), distributed under the Apache License 2.0.
+The text of the license is in the LICENSE file of this directory.
+
+The public interface (createChart, addSeries, timeScale, priceScale, panes, primitives, markers, names and default values of the
+documented options) follows the Lightweight Charts v5 API for compatibility.
+
+The geometry and behaviour parts (candle and bar widths, histogram columns, ticks, point markers, crosshair labels, last-bar rule,
+choice of time labels, grid steps, scale widths) were rewritten by looking at the pixels produced by Lightweight Charts rather than by
+copying its code, but a strict clean room is NOT claimed: the people who wrote them already knew the algorithms, and a second
+independent review (see DERIVAZIONE.md) judged some of them derived. The function-by-function list is in DERIVAZIONE.md.
+
+As requested by Lightweight Charts, whoever shows a chart built with this library must display, in a visible place (for example an
+"About and credits" page), the attribution notice to TradingView with a link to https://www.tradingview.com/.
+
+Lightweight Charts is a trademark of TradingView, Inc. This project is not affiliated with or endorsed by TradingView, Inc.
+
+The rest of the code (level of detail, data pyramid, WebGL drawing, script primitives, interaction) is original work by AnubiAI.

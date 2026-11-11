@@ -1,0 +1,76 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>One engine, live frame counter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #0e0e0f; overflow: hidden; font: 14px system-ui, sans-serif; }
+  #chart { position: absolute; left: 0; top: 0; bottom: 0; right: 0; }
+  #hud { position: absolute; left: 10px; top: 8px; z-index: 5; background: rgba(14,14,15,.9); color: #fff; padding: 6px 10px; border-radius: 4px; pointer-events: none; font-variant-numeric: tabular-nums; }
+  #hud b { font-size: 15px; }
+  #fps { font-size: 22px; font-weight: 700; display: block; }
+</style>
+<div id="chart"></div>
+<div id="hud"><b id="name"></b><span id="fps">-</span><span id="ms" style="color:#8b8f99"></span></div>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js"></script>
+<script type="module">
+import * as aq from '../src/lw.js';
+// ?engine=aq|lw  ?vis=3000 (visible bars)  ?lines=37  ?n=20000  ?w=470 (chart width in px)  ?speed=1200 (bars per second)
+const P = new URLSearchParams(location.search);
+const engine = P.get('engine') === 'lw' ? 'lw' : 'aq';
+const N = +(P.get('n') || 20000), LINES = +(P.get('lines') || 37), VIS = +(P.get('vis') || 600);
+const MODE = P.get('mode') === 'zoom' ? 'zoom' : 'pan'; // zoom: the visible bars swing between 600 and VIS, 1.2 s per cycle
+const W = +(P.get('w') || 0), SPEED = +(P.get('speed') || 1200);
+if (W) { const c = document.getElementById('chart'); c.style.right = 'auto'; c.style.width = W + 'px'; }
+const E = engine === 'aq' ? aq : window.LightweightCharts;
+document.getElementById('name').textContent = engine === 'aq' ? 'AnubiCharts (WebGL2)' : 'Lightweight Charts 5.2.1 (stock)';
+const PALETTE = ['#2962FF', '#FF6D00', '#AB47BC', '#26C6DA', '#FFEB3B', '#EC407A', '#66BB6A', '#8D6E63', '#BDBDBD', '#5C6BC0'];
+
+let seed = 12345, p = 100;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const bars = [];
+for (let i = 0; i < N; i++) {
+  const o = p, c = p + (rnd() - 0.5) * 2;
+  bars.push({ time: 1500000000 + i * 3600, open: o, high: Math.max(o, c) + rnd(), low: Math.min(o, c) - rnd(), close: c });
+  p = c;
+}
+function ma(len, ema) {
+  const out = []; let e = null, s = 0; const a = 2 / (len + 1);
+  for (let i = 0; i < bars.length; i++) {
+    const c = bars[i].close; s += c; if (i >= len) s -= bars[i - len].close; e = e === null ? c : e + a * (c - e);
+    if (i >= len - 1) out.push({ time: bars[i].time, value: ema ? e : s / len });
+  }
+  return out;
+}
+const chart = E.createChart(document.getElementById('chart'), {
+  autoSize: true,
+  layout: { background: { type: 'solid', color: '#0e0e0f' }, textColor: '#a8acb5' },
+  grid: { vertLines: { color: '#1a1b1f' }, horzLines: { color: '#1a1b1f' } },
+});
+chart.addSeries(E.CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false }).setData(bars);
+for (let k = 0; k < LINES; k++) chart.addSeries(E.LineSeries, { color: PALETTE[k % PALETTE.length], lineWidth: k % 3 === 0 ? 2 : 1, priceLineVisible: false, lastValueVisible: false }).setData(ma(5 + k * 7, k % 2 === 0));
+
+// The view moves with time (SPEED bars per second, back and forth over 3000 bars), so a slow engine shows a choppier pan instead of
+// a slower one. The counter is the real interval between this page's frames. window.__log keeps [time, position] of every frame
+// (used to rebuild a slow-motion replay from the real timings), __setPos(p) sets a position, __stop stops the loop.
+const LO = N - VIS - 4000, SPAN = 3000;
+const posAt = (ms) => { const d = (ms / 1000) * SPEED, m = d % (2 * SPAN); return LO + (m <= SPAN ? m : 2 * SPAN - m); };
+window.__chart = chart; window.__log = []; window.__stop = false;
+const ZTO = N - 1000, ZMIN = 600;
+window.__zoomAt = (ms) => ZMIN + (VIS - ZMIN) * (0.5 - 0.5 * Math.cos((2 * Math.PI * ms) / 1200));
+window.__setPos = MODE === 'zoom' ? (w) => chart.timeScale().setVisibleLogicalRange({ from: ZTO - w, to: ZTO }) : (pos) => chart.timeScale().setVisibleLogicalRange({ from: pos, to: pos + VIS });
+let prev = 0, t0 = 0, shown = 0;
+const iv = [], fpsEl = document.getElementById('fps'), msEl = document.getElementById('ms');
+const med = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
+function frame(t) {
+  if (window.__stop) return;
+  t0 ||= t;
+  if (prev) { iv.push(t - prev); if (iv.length > 60) iv.shift(); }
+  prev = t;
+  const pos = MODE === 'zoom' ? window.__zoomAt(t - t0) : posAt(t - t0);
+  window.__setPos(pos);
+  window.__log.push([t - t0, pos]);
+  if (t - shown > 250 && iv.length > 10) { shown = t; const m = med(iv); fpsEl.textContent = Math.round(1000 / m) + ' fps'; msEl.textContent = m.toFixed(1) + ' ms per frame'; }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>

@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8"><title>AnubiCharts: basic example</title>
+<body style="margin:0;background:#0e0e0f"><div id="chart" style="width:100vw;height:100vh"></div>
+<script type="module">
+import { createChart, CandlestickSeries, HistogramSeries } from '../src/lw.js';
+const chart = createChart(document.getElementById('chart'), {
+  autoSize: true,
+  layout: { background: { type: 'solid', color: '#0e0e0f' }, textColor: '#a8acb5' },
+  grid: { vertLines: { color: '#1a1b1f' }, horzLines: { color: '#1a1b1f' } },
+});
+const candles = chart.addSeries(CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false });
+const volume = chart.addSeries(HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' } });
+chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+// 20,000 synthetic candles
+let seed = 1, p = 100; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const data = [], vol = [];
+for (let i = 0; i < 20000; i++) {
+  const o = p, c = p + (rnd() - 0.5) * 2, time = 1600000000 + i * 3600;
+  data.push({ time, open: o, high: Math.max(o, c) + rnd(), low: Math.min(o, c) - rnd(), close: c });
+  vol.push({ time, value: 100 + rnd() * 900, color: c >= o ? '#26a69a66' : '#ef535066' });
+  p = c;
+}
+candles.setData(data); volume.setData(vol);
+window.chart = chart; // handy in the console
+chart.timeScale().setVisibleLogicalRange({ from: 19800, to: 20010 });
+</script>

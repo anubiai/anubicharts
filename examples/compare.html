@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>AnubiCharts vs Lightweight Charts: side by side</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #0e0e0f; color: #cfd2d9; font: 14px system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  .cols { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; min-height: 0; }
+  .col { position: relative; min-width: 0; }
+  .chart { position: absolute; inset: 0; }
+  .tag { position: absolute; left: 10px; top: 8px; z-index: 5; background: rgba(14,14,15,.85); padding: 4px 8px; border-radius: 4px; pointer-events: none; }
+  .tag b { color: #fff; }
+  footer { padding: 6px 12px; color: #8b8f99; font-size: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button { background: #1a1b1f; color: inherit; border: 1px solid #333; border-radius: 4px; padding: 3px 10px; cursor: pointer; }
+</style>
+<div class="cols">
+  <div class="col"><div class="tag"><b>AnubiCharts</b> (WebGL2)</div><div class="chart" id="ca"></div></div>
+  <div class="col"><div class="tag"><b>Lightweight Charts 5.2.1</b> (stock)</div><div class="chart" id="cl"></div></div>
+</div>
+<footer>
+  20,000 candles + 37 moving averages in each chart, same data, both panned 1 bar per frame.
+  Median frame interval of this page (both charts together): <b id="iv">-</b>. It cannot go below your display period, so the visible difference is smoothness, not this number: use benchmark.html for per-engine numbers.
+  <button id="toggle">Pause</button>
+</footer>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js"></script>
+<script type="module">
+import * as aq from '../src/lw.js';
+
+const PALETTE = ['#2962FF', '#FF6D00', '#AB47BC', '#26C6DA', '#FFEB3B', '#EC407A', '#66BB6A', '#8D6E63', '#BDBDBD', '#5C6BC0'];
+const N = 20000, LINES = 37, VIS = 600;
+
+function makeData(n) {
+  let seed = 12345, p = 100;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const bars = [];
+  for (let i = 0; i < n; i++) {
+    const o = p, c = p + (rnd() - 0.5) * 2;
+    bars.push({ time: 1500000000 + i * 3600, open: o, high: Math.max(o, c) + rnd(), low: Math.min(o, c) - rnd(), close: c });
+    p = c;
+  }
+  return bars;
+}
+function movingAverage(bars, len, ema) {
+  const out = []; let e = null, s = 0;
+  const a = 2 / (len + 1);
+  for (let i = 0; i < bars.length; i++) {
+    const c = bars[i].close;
+    s += c; if (i >= len) s -= bars[i - len].close;
+    e = e === null ? c : e + a * (c - e);
+    if (i >= len - 1) out.push({ time: bars[i].time, value: ema ? e : s / len });
+  }
+  return out;
+}
+
+const bars = makeData(N);
+const mas = Array.from({ length: LINES }, (_, k) => movingAverage(bars, 5 + k * 7, k % 2 === 0));
+
+function make(E, el) {
+  const chart = E.createChart(el, {
+    autoSize: true,
+    layout: { background: { type: 'solid', color: '#0e0e0f' }, textColor: '#a8acb5' },
+    grid: { vertLines: { color: '#1a1b1f' }, horzLines: { color: '#1a1b1f' } },
+  });
+  const cs = chart.addSeries(E.CandlestickSeries, { upColor: "#26a69a", downColor: "#ef5350", borderVisible: false }); cs.setData(bars);
+  mas.forEach((d, k) => chart.addSeries(E.LineSeries, { color: PALETTE[k % PALETTE.length], lineWidth: k % 3 === 0 ? 2 : 1, priceLineVisible: false, lastValueVisible: false }).setData(d));
+  return chart;
+}
+const charts = [make(aq, document.getElementById('ca')), make(window.LightweightCharts, document.getElementById('cl'))];
+
+// pan back and forth over 3000 bars; both charts are moved in the same animation frame
+let pos = N - VIS - 4000, dir = 1, paused = false, prev = 0;
+const iv = [];
+const med = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
+function frame(t) {
+  if (prev && !paused) { iv.push(t - prev); if (iv.length > 120) iv.shift(); }
+  prev = t;
+  if (!paused) {
+    pos += dir; if (pos > N - VIS - 1000) dir = -1; if (pos < N - VIS - 4000) dir = 1;
+    for (const c of charts) c.timeScale().setVisibleLogicalRange({ from: pos, to: pos + VIS });
+    if (iv.length > 10) document.getElementById("iv").textContent = med(iv).toFixed(1) + " ms";
+  }
+  requestAnimationFrame(frame);
+}
+charts.forEach((c) => c.timeScale().setVisibleLogicalRange({ from: pos, to: pos + VIS }));
+requestAnimationFrame(frame);
+document.getElementById("toggle").onclick = (e) => { paused = !paused; prev = 0; e.target.textContent = paused ? "Play" : "Pause"; };
+</script>

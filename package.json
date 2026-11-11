@@ -1,0 +1,37 @@
+{
+  "name": "anubicharts",
+  "version": "0.1.0",
+  "description": "WebGL2 chart renderer with a Lightweight Charts v5-compatible API",
+  "type": "module",
+  "main": "src/lw.js",
+  "exports": {
+    ".": "./src/lw.js"
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "DERIVAZIONE.md",
+    "README.md"
+  ],
+  "license": "Apache-2.0",
+  "author": "AnubiAI (anubiai.com)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anubiai/anubicharts.git"
+  },
+  "homepage": "https://github.com/anubiai/anubicharts#readme",
+  "bugs": {
+    "url": "https://github.com/anubiai/anubicharts/issues"
+  },
+  "keywords": [
+    "charts",
+    "webgl",
+    "candlestick",
+    "financial",
+    "lightweight-charts"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
