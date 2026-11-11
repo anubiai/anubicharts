@@ -1,5 +1,7 @@
 # AnubiCharts
 
+[![npm](https://img.shields.io/npm/v/anubicharts)](https://www.npmjs.com/package/anubicharts)
+
 A WebGL2 chart renderer for financial time series (candles, bars, lines, areas, histograms, multiple panes) with an API
 **compatible with TradingView Lightweight Charts v5** (`createChart`, `addSeries`, `timeScale`, `priceScale`, `panes`, primitives, markers).
 Made by [AnubiAI](https://anubiai.com); it is the chart engine of our trading platform, AnubiQuant. License: **Apache-2.0**.
