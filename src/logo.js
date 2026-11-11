@@ -1,5 +1,5 @@
 /**
- * Anubi mark shown as the attribution logo (bottom-left of the first pane), the way Lightweight Charts shows its own.
+ * Anubi mark shown as the attribution logo (bottom-left of the last pane), the way Lightweight Charts shows its own.
  * Turn it off with `layout: { attributionLogo: false }`.
  */
 export const MARK_VIEWBOX = "11.5 2 40.95 59.95";
@@ -13,7 +13,7 @@ export function createLogo() {
   return el;
 }
 
-/** Puts the logo at the bottom-left of the first pane; hides it if there is no room or the option is off. */
+/** Puts the logo at the bottom-left of the last pane; hides it if there is no room or the option is off. */
 export function placeLogo(el, on, left, paneTop, paneH, width = 34, height = 45, margin = 10) {
   const ok = on && paneH > height + margin * 2;
   el.style.display = ok ? "block" : "none";

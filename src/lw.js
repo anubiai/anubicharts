@@ -632,8 +632,8 @@ class Chart {
       y += h;
     });
     this.areaH = Math.max(1, Math.min(full, y));
-    const p0 = this.vis[0];
-    if (p0) placeLogo(this.logo, this.o.layout.attributionLogo !== false, this.lw, p0.y, p0.h);
+    const pl = this.vis[this.vis.length - 1]; // last visible pane
+    if (pl) placeLogo(this.logo, this.o.layout.attributionLogo !== false, this.lw, pl.y, pl.h);
     // hidden ones sit below the panes area (behind the date scale): no crosshair, click or drawing on them
     for (const p of this.panes) if (p.hidden) p.y = this.areaH + this.timeH;
     this.glc.style.left = this.lw + 'px';

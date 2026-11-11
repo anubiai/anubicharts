@@ -45,7 +45,7 @@ load from `file://`), for example `python -m http.server`:
 - `examples/solo.html`: one engine per page with a live frame counter (`?engine=aq|lw`, `?mode=zoom`, `?vis=3000`, `?w=940`).
 - `examples/compare.html`: the two engines side by side, panned in the same animation frame.
 
-The Anubi mark is shown at the bottom-left of the first pane, like the logo of Lightweight Charts; turn it off with `layout: { attributionLogo: false }`.
+The Anubi mark is shown at the bottom-left of the lowest pane (Lightweight Charts puts its own logo in the first one); turn it off with `layout: { attributionLogo: false }`.
 
 ## Coming from Lightweight Charts
 

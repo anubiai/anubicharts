@@ -2,7 +2,7 @@
 <meta charset="utf-8"><title>AnubiCharts: basic example</title>
 <body style="margin:0;background:#0e0e0f"><div id="chart" style="width:100vw;height:100vh"></div>
 <script type="module">
-import { createChart, CandlestickSeries, HistogramSeries } from '../src/lw.js';
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries } from '../src/lw.js';
 const chart = createChart(document.getElementById('chart'), {
   autoSize: true,
   layout: { background: { type: 'solid', color: '#0e0e0f' }, textColor: '#a8acb5' },
@@ -21,6 +21,23 @@ for (let i = 0; i < 20000; i++) {
   p = c;
 }
 candles.setData(data); volume.setData(vol);
+// moving averages on the main pane
+const sma = n => { const out = []; let sum = 0; for (let i = 0; i < data.length; i++) { sum += data[i].close; if (i >= n) sum -= data[i - n].close; if (i >= n - 1) out.push({ time: data[i].time, value: sum / n }); } return out; };
+for (const [n, color] of [[20, '#f5c542'], [50, '#4aa3ff'], [200, '#c77dff']]) {
+  chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(sma(n));
+}
+// RSI(14) in a second pane
+const rsiData = []; let ag = 0, al = 0;
+for (let i = 1; i < data.length; i++) {
+  const d = data[i].close - data[i - 1].close, g = Math.max(d, 0), l = Math.max(-d, 0);
+  if (i <= 14) { ag += g / 14; al += l / 14; } else { ag = (ag * 13 + g) / 14; al = (al * 13 + l) / 14; }
+  if (i >= 14) rsiData.push({ time: data[i].time, value: al === 0 ? 100 : 100 - 100 / (1 + ag / al) });
+}
+const rsi = chart.addSeries(LineSeries, { color: '#26a69a', lineWidth: 1, priceLineVisible: false }, 1);
+rsi.setData(rsiData);
+chart.panes()[1].setStretchFactor(0.35);
+rsi.createPriceLine({ price: 70, color: '#555', lineStyle: 2, axisLabelVisible: false });
+rsi.createPriceLine({ price: 30, color: '#555', lineStyle: 2, axisLabelVisible: false });
 window.chart = chart; // handy in the console
 chart.timeScale().setVisibleLogicalRange({ from: 19800, to: 20010 });
 </script>
