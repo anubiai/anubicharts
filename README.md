@@ -40,7 +40,8 @@ import { createChart, CandlestickSeries } from 'https://cdn.jsdelivr.net/npm/anu
 To try it from a clone instead, import `./src/lw.js` as the examples do, and serve the folder with any static server (ES modules do not
 load from `file://`), for example `python -m http.server`:
 
-- `examples/basic.html`: 20,000 candles with volume.
+- `examples/basic.html`: 20,000 candles with volume, three moving averages and an RSI pane.
+- `examples/binance-live.html`: live candles from Binance's public market data (no API key), with the same indicators (`?symbol=ETHUSDT&interval=5m`).
 - `examples/benchmark.html`: pan and zoom tests for each engine (see *Performance*).
 - `examples/solo.html`: one engine per page with a live frame counter (`?engine=aq|lw`, `?mode=zoom`, `?vis=3000`, `?w=940`).
 - `examples/compare.html`: the two engines side by side, panned in the same animation frame.

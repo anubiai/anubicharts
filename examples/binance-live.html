@@ -1,0 +1,95 @@
+<!doctype html>
+<meta charset="utf-8"><title>AnubiCharts: live Binance example</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #0e0e0f; font: 13px system-ui, sans-serif; }
+  #chart { width: 100vw; height: 100vh; }
+  #hud { position: fixed; left: 10px; top: 8px; z-index: 5; background: rgba(14,14,15,.85); color: #cfd2d9; padding: 5px 9px; border-radius: 4px; pointer-events: none; }
+</style>
+<div id="chart"></div>
+<div id="hud">connecting…</div>
+<script type="module">
+// Live candles from Binance's public market data (no API key): REST for the history, WebSocket for the current candle.
+// ?symbol=ETHUSDT  ?interval=1m|5m|1h…  ?pages=5 (1000 candles each)
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries } from '../src/lw.js';
+const P = new URLSearchParams(location.search);
+const SYMBOL = (P.get('symbol') || 'BTCUSDT').toUpperCase(), INTERVAL = P.get('interval') || '1m', PAGES = Math.min(+(P.get('pages') || 5), 20);
+const hud = document.getElementById('hud');
+
+const chart = createChart(document.getElementById('chart'), {
+  autoSize: true,
+  layout: { background: { type: 'solid', color: '#0e0e0f' }, textColor: '#a8acb5' },
+  grid: { vertLines: { color: '#1a1b1f' }, horzLines: { color: '#1a1b1f' } },
+  timeScale: { timeVisible: true, secondsVisible: false },
+});
+const candles = chart.addSeries(CandlestickSeries, { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false });
+const volume = chart.addSeries(HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' } });
+chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+const MAS = [[20, '#f5c542'], [50, '#4aa3ff'], [200, '#c77dff']];
+const maSeries = MAS.map(([, color]) => chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false }));
+const rsi = chart.addSeries(LineSeries, { color: '#26a69a', lineWidth: 1, priceLineVisible: false }, 1);
+chart.panes()[1].setStretchFactor(0.35);
+rsi.createPriceLine({ price: 70, color: '#555', lineStyle: 2, axisLabelVisible: false });
+rsi.createPriceLine({ price: 30, color: '#555', lineStyle: 2, axisLabelVisible: false });
+
+const bars = []; // { time, open, high, low, close, volume }
+const row = (k) => ({ time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] });
+const volPoint = (b) => ({ time: b.time, value: b.volume, color: b.close >= b.open ? '#26a69a66' : '#ef535066' });
+
+// indicators at bar i, computed from the closes (the RSI uses Wilder smoothing, recomputed in full only on load)
+const smaAt = (n, i) => { if (i < n - 1) return null; let s = 0; for (let j = i - n + 1; j <= i; j++) s += bars[j].close; return s / n; };
+let rsiState = []; // [avgGain, avgLoss] per bar
+function rsiAt(i) {
+  if (i < 14) return null;
+  if (i === 14 && !rsiState[i]) { let g = 0, l = 0; for (let j = 1; j <= 14; j++) { const d = bars[j].close - bars[j - 1].close; g += Math.max(d, 0) / 14; l += Math.max(-d, 0) / 14; } rsiState[i] = [g, l]; }
+  else if (!rsiState[i] || rsiState[i].stale) { const [pg, pl] = rsiState[i - 1] || [0, 0]; const d = bars[i].close - bars[i - 1].close; rsiState[i] = [(pg * 13 + Math.max(d, 0)) / 14, (pl * 13 + Math.max(-d, 0)) / 14]; }
+  const [g, l] = rsiState[i];
+  return l === 0 ? 100 : 100 - 100 / (1 + g / l);
+}
+function indicatorsAt(i) {
+  const t = bars[i].time;
+  return { ma: MAS.map(([n]) => { const v = smaAt(n, i); return v === null ? null : { time: t, value: v }; }), rsi: (() => { const v = rsiAt(i); return v === null ? null : { time: t, value: v }; })() };
+}
+
+async function loadHistory() {
+  let end = Date.now(), all = [];
+  for (let p = 0; p < PAGES; p++) {
+    const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${SYMBOL}&interval=${INTERVAL}&limit=1000&endTime=${end}`);
+    if (!r.ok) throw new Error('Binance REST ' + r.status);
+    const page = (await r.json()).map(row);
+    if (!page.length) break;
+    all = page.concat(all); end = page[0].time * 1000 - 1;
+    hud.textContent = `loading ${all.length} candles…`;
+  }
+  bars.push(...all);
+  candles.setData(bars); volume.setData(bars.map(volPoint));
+  rsiState = []; // rebuild Wilder state once
+  const ma = MAS.map(() => []), rs = [];
+  for (let i = 0; i < bars.length; i++) { const x = indicatorsAt(i); x.ma.forEach((v, k) => v && ma[k].push(v)); if (x.rsi) rs.push(x.rsi); }
+  ma.forEach((d, k) => maSeries[k].setData(d)); rsi.setData(rs);
+  chart.timeScale().setVisibleLogicalRange({ from: bars.length - 160, to: bars.length + 8 });
+}
+
+let ticks = 0, lastSec = performance.now();
+function onKline(k) {
+  const b = row([k.t, k.o, k.h, k.l, k.c, k.v]);
+  const last = bars[bars.length - 1];
+  if (b.time === last.time) bars[bars.length - 1] = b; else if (b.time > last.time) bars.push(b); else return;
+  const i = bars.length - 1;
+  if (rsiState[i]) rsiState[i].stale = true; // a new close for the same bar: recompute from the previous bar
+  candles.update(b); volume.update(volPoint(b));
+  const x = indicatorsAt(i);
+  x.ma.forEach((v, n) => v && maSeries[n].update(v)); if (x.rsi) rsi.update(x.rsi);
+  ticks++;
+  const now = performance.now();
+  if (now - lastSec > 1000) { hud.textContent = `${SYMBOL} ${INTERVAL} · ${b.close} · ${bars.length} candles · ${Math.round(ticks * 1000 / (now - lastSec))} updates/s`; ticks = 0; lastSec = now; }
+}
+
+function connect() {
+  const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${SYMBOL.toLowerCase()}@kline_${INTERVAL}`);
+  ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.k) onKline(m.k); };
+  ws.onclose = () => { hud.textContent = 'disconnected, retrying…'; setTimeout(connect, 2000); };
+}
+loadHistory().then(connect).catch((e) => { hud.textContent = 'error: ' + e.message; });
+window.chart = chart;
+</script>
